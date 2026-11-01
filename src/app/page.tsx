@@ -71,11 +71,15 @@ const STEPS = [
 const FAQ = [
   {
     q: "需要註冊帳號嗎？",
-    a: "不需要。打開頁面、貼上職缺描述，就可以直接開始模擬面試。",
+    a: "不需要。設定好你的 OpenAI API Key、貼上職缺描述，就可以直接開始模擬面試。",
   },
   {
-    q: "我的回答會被保存嗎？",
-    a: "伺服器不會儲存你的面試內容。對話只存在你的瀏覽器分頁中，關閉或重新開始就會清除；作答內容會傳送給 AI 模型以產生回應。",
+    q: "為什麼需要自己的 OpenAI API Key？",
+    a: "本服務採用 BYOK（Bring Your Own Key）模式：AI 面試官使用你自己的 OpenAI API Key 呼叫模型，費用直接由你的 OpenAI 帳戶支付。點右上角「API Key」即可設定，可到 platform.openai.com/api-keys 建立。",
+  },
+  {
+    q: "我的 API Key 和回答會被保存嗎？",
+    a: "API Key 只儲存在你瀏覽器的 localStorage，每次請求時附上，伺服器僅用來轉送給 OpenAI，不會儲存或記錄。面試對話只存在你的瀏覽器分頁中，關閉或重新開始就會清除。",
   },
   {
     q: "可以練習哪些職位？",
@@ -118,7 +122,7 @@ export default function LandingPage() {
               結束後給你評分，以及<strong className="font-medium text-ink">每一題的示範回答</strong>。
             </p>
             <div className="mt-10 flex flex-wrap items-center gap-4">
-              <PrimaryButton href="/interview">免費開始模擬面試</PrimaryButton>
+              <PrimaryButton href="/interview">立即開始模擬面試</PrimaryButton>
               <Link
                 href="#how"
                 className="rounded-full px-5 py-3.5 text-[15px] font-medium text-ink underline-offset-4 hover:underline"
@@ -126,7 +130,7 @@ export default function LandingPage() {
                 看看怎麼運作
               </Link>
             </div>
-            <p className="mt-6 font-mono text-xs text-muted">無需註冊 · 1–10 題自由選擇 · 繁體中文</p>
+            <p className="mt-6 font-mono text-xs text-muted">無需註冊 · 使用你自己的 OpenAI API Key · 1–10 題自由選擇</p>
           </div>
 
           {/* Hero 右側：產品畫面示意 */}

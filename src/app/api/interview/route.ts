@@ -4,6 +4,10 @@
  * 檔案位置 src/app/api/interview/route.ts 會自動對應到網址 /api/interview。
  * 這裡匯出名為 POST 的函式，代表這個網址只接受 POST 請求。
  *
+ * BYOK（Bring Your Own Key）：
+ *   不使用伺服器的環境變數，而是由使用者在前端設定自己的 OpenAI API Key，
+ *   每次請求透過 header「x-openai-key」帶過來。伺服器只拿它呼叫 OpenAI，不儲存、不記錄。
+ *
  * 設計重點：這個 API 是「無狀態」的（stateless）。
  *   伺服器不記任何面試進度，前端每次都把「職缺描述 + 題數 + 完整對話紀錄」整包送來，
  *   伺服器根據「候選人已經回答幾題」來決定這一輪要做什麼：
@@ -16,6 +20,7 @@
 import OpenAI from "openai";
 // 從共用檔匯入題數上下限與型別（前後端共用同一份定義，避免兩邊對不上）
 import {
+  API_KEY_HEADER,
   MAX_QUESTIONS,
   MIN_QUESTIONS,
   type ChatMessage,
@@ -104,11 +109,22 @@ questions 陣列必須剛好 ${total} 個元素，依題目順序排列。`;
  *   失敗時回 { error: string } 並帶對應的 HTTP 狀態碼
  */
 export async function POST(req: Request) {
-  // ── 步驟 1：確認伺服器有設定 API 金鑰 ──────────────────────────
-  // OPENAI_API_KEY 來自 .env.local，Next.js 啟動時會自動載入成環境變數
-  if (!process.env.OPENAI_API_KEY) {
-    // 500 = 伺服器端設定錯誤，不是使用者的問題
-    return Response.json({ error: "伺服器未設定 OPENAI_API_KEY" }, { status: 500 });
+  // ── 步驟 1：從 header 取得使用者自己的 OpenAI API Key（BYOK）────────
+  // 不讀取伺服器環境變數；沒帶 key 就直接拒絕
+  const apiKey = req.headers.get(API_KEY_HEADER)?.trim() ?? "";
+  if (!apiKey) {
+    // 401 = 缺少驗證資訊，前端會提示使用者到「設定」輸入 API Key
+    return Response.json(
+      { error: "請先在「設定」中輸入你的 OpenAI API Key", code: "missing_api_key" },
+      { status: 401 },
+    );
+  }
+  // 基本格式檢查：OpenAI key 以 sk- 開頭、不含空白、長度合理
+  if (!apiKey.startsWith("sk-") || /\s/.test(apiKey) || apiKey.length > 300) {
+    return Response.json(
+      { error: "API Key 格式不正確，請到「設定」重新輸入", code: "invalid_api_key" },
+      { status: 401 },
+    );
   }
 
   // ── 步驟 2：解析請求的 JSON body ────────────────────────────────
@@ -157,8 +173,8 @@ export async function POST(req: Request) {
     return Response.json({ error: "面試已結束" }, { status: 400 });
   }
 
-  // 建立 OpenAI 客戶端；不傳參數時 SDK 會自動讀取環境變數 OPENAI_API_KEY
-  const client = new OpenAI();
+  // 用使用者的 key 建立 OpenAI 客戶端（明確傳入 apiKey，不會讀取環境變數）
+  const client = new OpenAI({ apiKey });
 
   try {
     // ── 步驟 5：呼叫 OpenAI Chat Completions API ──────────────────
@@ -229,9 +245,30 @@ export async function POST(req: Request) {
     // ── 步驟 7：回傳結果給前端 ─────────────────────────────────────
     return Response.json(result);
   } catch (err) {
-    // OpenAI 呼叫失敗（網路、金鑰、額度）或模型回應格式錯誤，都會到這裡。
-    // 詳細錯誤只印在伺服器 log，不回傳給前端，避免洩漏內部資訊。
-    console.error("[/api/interview]", err);
+    // OpenAI 回傳的錯誤：依狀態碼給使用者看得懂的訊息
+    if (err instanceof OpenAI.APIError) {
+      if (err.status === 401) {
+        return Response.json(
+          { error: "OpenAI 拒絕了這組 API Key，請確認後到「設定」重新輸入", code: "invalid_api_key" },
+          { status: 401 },
+        );
+      }
+      if (err.status === 429) {
+        return Response.json(
+          { error: "你的 OpenAI 帳戶已達速率限制或額度不足，請稍後再試或檢查帳戶餘額" },
+          { status: 429 },
+        );
+      }
+      if (err.status === 403 || err.status === 404) {
+        return Response.json(
+          { error: `你的 API Key 無法使用模型 ${MODEL}，請確認帳戶權限` },
+          { status: 403 },
+        );
+      }
+    }
+    // 其他錯誤（網路、模型回應格式錯誤等）。
+    // 只記錄錯誤類型與訊息，不記錄整個物件，避免任何請求資訊（含 key）出現在 log。
+    console.error("[/api/interview]", err instanceof Error ? err.message : "unknown error");
     // 502 = 上游服務（OpenAI）出問題
     return Response.json({ error: "AI 面試官暫時無法回應，請稍後再試" }, { status: 502 });
   }

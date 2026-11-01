@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "./logo";
+import { SettingsButton } from "./settings-dialog";
 
 const NAV = [
   { href: "/#features", label: "功能" },
@@ -24,13 +25,16 @@ export function SiteHeader() {
             </Link>
           ))}
         </nav>
-        <Link
-          href="/interview"
-          className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-sm font-medium text-paper transition hover:bg-accent"
-        >
-          開始模擬面試
-          <span aria-hidden>→</span>
-        </Link>
+        <div className="flex items-center gap-2">
+          <SettingsButton />
+          <Link
+            href="/interview"
+            className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-sm font-medium text-paper transition hover:bg-accent"
+          >
+            開始模擬面試
+            <span aria-hidden>→</span>
+          </Link>
+        </div>
       </div>
     </header>
   );

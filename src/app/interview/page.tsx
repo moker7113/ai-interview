@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { getApiKey, openSettings, useApiKey } from "@/lib/api-key";
 import {
+  API_KEY_HEADER,
   DEFAULT_QUESTIONS,
   MAX_QUESTIONS,
   MIN_QUESTIONS,
@@ -29,6 +31,8 @@ export default function InterviewPage() {
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [keyError, setKeyError] = useState(false); // 錯誤是否與 API Key 有關（顯示「前往設定」）
+  const apiKey = useApiKey();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // 面試中：有新訊息就捲到底；結束時：捲回頁首看報告
@@ -40,14 +44,22 @@ export default function InterviewPage() {
   async function callInterview(history: ChatMessage[]) {
     setLoading(true);
     setError("");
+    setKeyError(false);
     try {
       const res = await fetch("/api/interview", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          // BYOK：每次請求都從 localStorage 取出使用者的 key 帶上
+          [API_KEY_HEADER]: getApiKey(),
+        },
         body: JSON.stringify({ jobDescription, totalQuestions, messages: history }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "發生錯誤");
+      if (!res.ok) {
+        if (res.status === 401) setKeyError(true);
+        throw new Error(data.error || "發生錯誤");
+      }
 
       const result = data as InterviewResponse;
       if (result.type === "question") {
@@ -69,6 +81,10 @@ export default function InterviewPage() {
 
   async function start() {
     if (!jobDescription.trim() || loading) return;
+    if (!getApiKey()) {
+      openSettings();
+      return;
+    }
     setStage("interview");
     setMessages([]);
     const ok = await callInterview([]);
@@ -97,6 +113,7 @@ export default function InterviewPage() {
     setQuestionNumber(0);
     setEvaluation(null);
     setError("");
+    setKeyError(false);
   }
 
   const answered = messages.filter((m) => m.role === "candidate").length;
@@ -112,6 +129,8 @@ export default function InterviewPage() {
           onStart={start}
           loading={loading}
           error={error}
+          keyError={keyError}
+          hasApiKey={Boolean(apiKey)}
         />
       )}
 
@@ -157,7 +176,7 @@ export default function InterviewPage() {
           {/* 作答區 */}
           {questionNumber > 0 && (
             <div className="sticky bottom-0 -mx-5 mt-auto bg-gradient-to-t from-paper via-paper to-paper/0 px-5 pt-6 pb-6">
-              {error && <ErrorNote message={error} />}
+              {error && <ErrorNote message={error} keyError={keyError} />}
               <div className="rounded-2xl border border-line bg-card p-3 shadow-[0_10px_30px_-15px_rgb(23_20_15/0.3)] focus-within:border-ink">
                 <textarea
                   value={answer}
@@ -190,7 +209,7 @@ export default function InterviewPage() {
               </div>
             </div>
           )}
-          {questionNumber === 0 && error && <ErrorNote message={error} />}
+          {questionNumber === 0 && error && <ErrorNote message={error} keyError={keyError} />}
         </section>
       )}
 
@@ -211,8 +230,20 @@ function SetupView(props: {
   onStart: () => void;
   loading: boolean;
   error: string;
+  keyError: boolean;
+  hasApiKey: boolean;
 }) {
-  const { jobDescription, setJobDescription, totalQuestions, setTotalQuestions, onStart, loading, error } = props;
+  const {
+    jobDescription,
+    setJobDescription,
+    totalQuestions,
+    setTotalQuestions,
+    onStart,
+    loading,
+    error,
+    keyError,
+    hasApiKey,
+  } = props;
   return (
     <section className="bg-grid border-b border-line">
       <div className="mx-auto grid max-w-6xl gap-12 px-5 py-14 lg:grid-cols-[1fr_1.35fr] lg:py-20">
@@ -290,9 +321,28 @@ function SetupView(props: {
             </div>
           </fieldset>
 
+          {/* API Key 狀態 */}
+          <div
+            className={`mt-7 flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${
+              hasApiKey ? "border-line bg-paper/60" : "border-accent/30 bg-accent-soft"
+            }`}
+          >
+            <span className="flex items-center gap-2.5">
+              <span className={`size-2 shrink-0 rounded-full ${hasApiKey ? "bg-sage" : "bg-accent"}`} />
+              {hasApiKey ? "已設定 OpenAI API Key" : "需要你自己的 OpenAI API Key 才能開始"}
+            </span>
+            <button
+              type="button"
+              onClick={openSettings}
+              className="shrink-0 font-medium text-ink underline underline-offset-2 hover:text-accent"
+            >
+              {hasApiKey ? "更換" : "前往設定"}
+            </button>
+          </div>
+
           {error && (
             <div className="mt-6">
-              <ErrorNote message={error} />
+              <ErrorNote message={error} keyError={keyError} />
             </div>
           )}
 
@@ -356,11 +406,23 @@ function TypingBubble() {
   );
 }
 
-function ErrorNote({ message }: { message: string }) {
+function ErrorNote({ message, keyError = false }: { message: string; keyError?: boolean }) {
   return (
-    <p role="alert" className="mb-3 rounded-xl border border-accent/30 bg-accent-soft px-4 py-3 text-sm text-accent-deep">
-      {message}
-    </p>
+    <div
+      role="alert"
+      className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-accent/30 bg-accent-soft px-4 py-3 text-sm text-accent-deep"
+    >
+      <span>{message}</span>
+      {keyError && (
+        <button
+          type="button"
+          onClick={openSettings}
+          className="shrink-0 font-medium text-ink underline underline-offset-2 hover:text-accent"
+        >
+          前往設定
+        </button>
+      )}
+    </div>
   );
 }
 

@@ -2,6 +2,9 @@ export const MIN_QUESTIONS = 1;
 export const MAX_QUESTIONS = 10;
 export const DEFAULT_QUESTIONS = 3;
 
+/** 前端呼叫 /api/interview 時，用這個 header 帶上使用者自己的 OpenAI API Key（BYOK） */
+export const API_KEY_HEADER = "x-openai-key";
+
 export type ChatMessage = {
   role: "interviewer" | "candidate";
   content: string;
